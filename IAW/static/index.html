@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quiz educațional</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Quiz educațional</h1>
+      <p class="subtitle">Întrebările vin de la Open Trivia DB, iar scorurile se salvează pe serverul propriu.</p>
+    </header>
+
+    <p id="message" class="message" role="alert" hidden></p>
+
+    <section id="setup" class="card">
+      <h2>Începe un quiz</h2>
+      <form id="setup-form">
+        <label>Numele tău
+          <input id="player" maxlength="30" required autocomplete="off">
+        </label>
+        <div class="row">
+          <label>Număr de întrebări
+            <select id="amount">
+              <option value="5" selected>5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+            </select>
+          </label>
+          <label>Dificultate
+            <select id="difficulty">
+              <option value="" selected>Oricare</option>
+              <option value="easy">Ușor</option>
+              <option value="medium">Mediu</option>
+              <option value="hard">Greu</option>
+            </select>
+          </label>
+        </div>
+        <label>Categorie
+          <select id="category">
+            <option value="" selected>Oricare</option>
+          </select>
+        </label>
+        <button id="start-btn" type="submit">Începe quiz-ul</button>
+      </form>
+    </section>
+
+    <section id="quiz" class="card" hidden>
+      <p id="progress" class="progress"></p>
+      <h2 id="question-text"></h2>
+      <p id="question-category" class="category"></p>
+      <div id="options" class="options"></div>
+      <button id="next-btn" type="button" disabled>Următoarea</button>
+    </section>
+
+    <section id="result" class="card" hidden>
+      <h2 id="result-title"></h2>
+      <ol id="result-details" class="details"></ol>
+      <button id="again-btn" type="button">Un quiz nou</button>
+    </section>
+
+    <section id="leaderboard" class="card">
+      <h2>Clasament</h2>
+      <p id="empty-scores" class="muted" hidden>Nu există încă niciun scor.</p>
+      <table id="scores-table" hidden>
+        <thead>
+          <tr><th>#</th><th>Jucător</th><th>Scor</th><th>Dificultate</th><th></th></tr>
+        </thead>
+        <tbody id="scores-body"></tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
