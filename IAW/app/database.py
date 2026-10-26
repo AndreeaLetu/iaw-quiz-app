@@ -23,6 +23,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player TEXT NOT NULL,
                 score INTEGER NOT NULL,
+                points INTEGER NOT NULL DEFAULT 0,
                 total INTEGER NOT NULL,
                 difficulty TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -31,11 +32,11 @@ def init_db():
         )
 
 
-def add_score(player, score, total, difficulty):
+def add_score(player, score, total, difficulty, points):
     with connect() as conn:
         cur = conn.execute(
-            "INSERT INTO scores (player, score, total, difficulty) VALUES (?, ?, ?, ?)",
-            (player, score, total, difficulty),
+            "INSERT INTO scores (player, score, total, difficulty, points) VALUES (?, ?, ?, ?, ?)",
+            (player, score, total, difficulty, points),
         )
         return cur.lastrowid
 
@@ -44,9 +45,9 @@ def list_scores(limit):
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, player, score, total, difficulty, created_at
+            SELECT id, player, score, points, total, difficulty, created_at
             FROM scores
-            ORDER BY CAST(score AS REAL) / total DESC, total DESC, id ASC
+            ORDER BY points DESC, id ASC
             LIMIT ?
             """,
             (limit,),
@@ -60,15 +61,14 @@ def delete_score(score_id):
         return cur.rowcount > 0
 
 
-def update_score(score_id, score, total, difficulty):
+def update_score(score_id, score, total, difficulty, points):
     with connect() as conn:
         cur = conn.execute(
             """
-                        UPDATE scores
-                        SET score = ?, total = ?, difficulty = ?, created_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                        """,
-            (score, total, difficulty, score_id),
-
+            UPDATE scores
+            SET score = ?, total = ?, difficulty = ?, points = ?, created_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (score, total, difficulty, points, score_id),
         )
         return cur.rowcount > 0
