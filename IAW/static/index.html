@@ -51,6 +51,8 @@
     <section id="quiz" class="card" hidden>
       <p id="retake-info" class="retake-info" hidden></p>
       <p id="progress" class="progress"></p>
+      <div class="timer"><div id="timer-bar" class="timer-bar"></div></div>
+      <p id="timer-text" class="muted"></p>
       <h2 id="question-text"></h2>
       <p id="question-category" class="category"></p>
       <div id="options" class="options"></div>
@@ -68,7 +70,7 @@
       <p id="empty-scores" class="muted" hidden>Nu există încă niciun scor.</p>
       <table id="scores-table" hidden>
         <thead>
-          <tr><th>#</th><th>Jucător</th><th>Scor</th><th>Dificultate</th><th></th></tr>
+          <tr><th>#</th><th>Jucător</th><th>Scor</th><th>Puncte</th><th>Dificultate</th><th></th></tr>
         </thead>
         <tbody id="scores-body"></tbody>
       </table>

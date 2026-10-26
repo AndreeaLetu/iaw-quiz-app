@@ -1,13 +1,16 @@
 let quizId = null;
 let questions = [];
 let answers = [];
+let times = [];
 let current = 0;
+let timeLimitMs = 15000;
+let questionStart = 0;
+let timerId = null;
 let retakeScoreId = null;
 
 const DIFFICULTY_LABELS = { easy: "Ușor", medium: "Mediu", hard: "Greu" };
 
 const $ = (id) => document.getElementById(id);
-
 
 function showMessage(text) {
   const box = $("message");
@@ -38,11 +41,11 @@ async function api(path, options) {
 }
 
 function showSection(name) {
+  if (name !== "quiz") stopTimer();
   $("setup").hidden = name !== "setup";
   $("quiz").hidden = name !== "quiz";
   $("result").hidden = name !== "result";
 }
-
 
 async function loadCategories() {
   try {
@@ -58,31 +61,81 @@ async function loadCategories() {
   }
 }
 
+function stopTimer() {
+  if (timerId !== null) {
+    clearInterval(timerId);
+    timerId = null;
+  }
+}
+
+function startTimer() {
+  stopTimer();
+  questionStart = Date.now();
+  $("timer-bar").style.width = "100%";
+  $("timer-bar").classList.remove("low");
+  $("timer-text").textContent = Math.ceil(timeLimitMs / 1000) + " s";
+  timerId = setInterval(tick, 100);
+}
+
+function tick() {
+  const left = timeLimitMs - (Date.now() - questionStart);
+  if (left <= 0) {
+    onTimeout();
+    return;
+  }
+  $("timer-bar").style.width = (left / timeLimitMs) * 100 + "%";
+  $("timer-bar").classList.toggle("low", left <= 5000);
+  $("timer-text").textContent = Math.ceil(left / 1000) + " s";
+}
+
+function lockOptions() {
+  for (const b of $("options").children) b.disabled = true;
+}
+
+function onTimeout() {
+  stopTimer();
+  answers[current] = -1;
+  times[current] = timeLimitMs;
+  lockOptions();
+  $("timer-bar").style.width = "0%";
+  $("timer-text").textContent = "Timpul a expirat";
+  $("next-btn").disabled = false;
+}
+
+function beginQuiz(data, scoreId, infoText) {
+  quizId = data.quiz_id;
+  questions = data.questions;
+  timeLimitMs = data.time_limit_ms || 15000;
+  answers = [];
+  times = [];
+  current = 0;
+  retakeScoreId = scoreId;
+
+  const info = $("retake-info");
+  info.textContent = infoText || "";
+  info.hidden = !infoText;
+
+  showSection("quiz");
+  showQuestion();
+}
 
 async function startQuiz(event) {
   event.preventDefault();
   clearMessage();
-   retakeScoreId = null;
-  $("retake-info").hidden = true;
 
   const body = { amount: Number($("amount").value) };
   if ($("difficulty").value) body.difficulty = $("difficulty").value;
   if ($("category").value) body.category = Number($("category").value);
 
   const button = $("start-btn");
-  button.disabled = true;     // evită dublu-click (Open Trivia limitează cererile)
+  button.disabled = true;
   try {
     const data = await api("/api/quizzes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    quizId = data.quiz_id;
-    questions = data.questions;
-    answers = [];
-    current = 0;
-    showSection("quiz");
-    showQuestion();
+    beginQuiz(data, null, null);
   } catch (e) {
     showMessage(e.message);
   } finally {
@@ -90,6 +143,28 @@ async function startQuiz(event) {
   }
 }
 
+async function startRetake(score) {
+  clearMessage();
+
+  const body = { amount: score.total };
+  if (score.difficulty) body.difficulty = score.difficulty;
+
+  try {
+    const data = await api("/api/quizzes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    beginQuiz(
+      data,
+      score.id,
+      "Reiei quiz-ul pentru " + score.player + ". Scorul din clasament va fi înlocuit."
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (e) {
+    showMessage(e.message);
+  }
+}
 
 function showQuestion() {
   const q = questions[current];
@@ -109,17 +184,23 @@ function showQuestion() {
 
   const isLast = current === questions.length - 1;
   $("next-btn").textContent = isLast ? "Termină" : "Următoarea";
-  $("next-btn").disabled = true;   // se activează după ce alegi o variantă
+  $("next-btn").disabled = true;
+
+  startTimer();
 }
 
 function selectOption(index, button) {
+  if (timerId === null) return;
+  stopTimer();
   answers[current] = index;
-  for (const b of $("options").children) b.classList.remove("selected");
+  times[current] = Date.now() - questionStart;
   button.classList.add("selected");
+  lockOptions();
   $("next-btn").disabled = false;
 }
 
 function nextQuestion() {
+  stopTimer();
   if (current < questions.length - 1) {
     current += 1;
     showQuestion();
@@ -128,25 +209,26 @@ function nextQuestion() {
   }
 }
 
-
 async function submitQuiz() {
   clearMessage();
   $("next-btn").disabled = true;
   try {
     let result;
     if (retakeScoreId === null) {
-
       result = await api("/api/quizzes/" + quizId + "/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ player: $("player").value.trim(), answers: answers }),
+        body: JSON.stringify({
+          player: $("player").value.trim(),
+          answers: answers,
+          times_ms: times,
+        }),
       });
     } else {
-
       result = await api("/api/scores/" + retakeScoreId, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quiz_id: quizId, answers: answers }),
+        body: JSON.stringify({ quiz_id: quizId, answers: answers, times_ms: times }),
       });
       retakeScoreId = null;
     }
@@ -159,7 +241,8 @@ async function submitQuiz() {
 }
 
 function showResult(result) {
-  $("result-title").textContent = "Scor: " + result.score + " / " + result.total;
+  $("result-title").textContent =
+    "Scor: " + result.score + " / " + result.total + " · " + result.points + " puncte";
 
   const list = $("result-details");
   list.replaceChildren();
@@ -182,46 +265,22 @@ function showResult(result) {
       correct.textContent = "Corect: " + d.correct_answer;
       li.appendChild(correct);
     }
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = (d.time_ms / 1000).toFixed(1) + " s · +" + d.points + " puncte";
+    li.appendChild(meta);
+
     list.appendChild(li);
   }
   showSection("result");
 }
 
-async function startRetake(score) {
-  clearMessage();
-
-  const body = { amount: score.total };
-  if (score.difficulty) body.difficulty = score.difficulty;
-
-  try {
-    const data = await api("/api/quizzes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    quizId = data.quiz_id;
-    questions = data.questions;
-    answers = [];
-    current = 0;
-    retakeScoreId = score.id;
-
-    $("retake-info").textContent =
-      "Reiei quiz-ul pentru " + score.player + ". Scorul din clasament va fi înlocuit.";
-    $("retake-info").hidden = false;
-
-    showSection("quiz");
-    showQuestion();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } catch (e) {
-    showMessage(e.message);
-  }
-}
-
 function newQuiz() {
   clearMessage();
+  retakeScoreId = null;
   showSection("setup");
 }
-
 
 async function loadScores() {
   try {
@@ -238,6 +297,7 @@ async function loadScores() {
         i + 1,
         s.player,
         s.score + " / " + s.total,
+        s.points,
         DIFFICULTY_LABELS[s.difficulty] || "Oricare",
       ];
       for (const value of cells) {
@@ -281,7 +341,6 @@ async function deleteScore(id) {
     showMessage(e.message);
   }
 }
-
 
 $("setup-form").addEventListener("submit", startQuiz);
 $("next-btn").addEventListener("click", nextQuestion);
