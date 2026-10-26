@@ -1,80 +1,150 @@
 <!doctype html>
-<html lang="ro">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Quiz educațional</title>
+  <title>Educational Quiz</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="app.js" defer></script>
 </head>
-<body>
-  <main>
-    <header>
-      <h1>Quiz educațional</h1>
-      <p class="subtitle">Întrebările vin de la Open Trivia DB, iar scorurile se salvează pe serverul propriu.</p>
-    </header>
+<body class="guest">
+  <header class="nav">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="12" fill="none" stroke="#e3e6f1" stroke-width="5"/>
+        <circle cx="16" cy="16" r="12" fill="none" stroke="#3347ff" stroke-width="5"
+                stroke-linecap="round" stroke-dasharray="56 76" transform="rotate(-90 16 16)"/>
+      </svg>
+      <span>Educational Quiz</span>
+    </div>
+    <div id="user-bar" class="user-bar" hidden>
+      <span id="user-name" class="user-chip"></span>
+      <button id="logout-btn" type="button" class="small">Log out</button>
+    </div>
+  </header>
 
+  <main class="stage">
     <p id="message" class="message" role="alert" hidden></p>
 
-    <section id="setup" class="card">
-      <h2>Începe un quiz</h2>
-      <form id="setup-form">
-        <label>Numele tău
-          <input id="player" maxlength="30" required autocomplete="off">
-        </label>
-        <div class="row">
-          <label>Număr de întrebări
-            <select id="amount">
-              <option value="5" selected>5</option>
-              <option value="10">10</option>
-              <option value="15">15</option>
-            </select>
-          </label>
-          <label>Dificultate
-            <select id="difficulty">
-              <option value="" selected>Oricare</option>
-              <option value="easy">Ușor</option>
-              <option value="medium">Mediu</option>
-              <option value="hard">Greu</option>
-            </select>
-          </label>
+    <section id="auth" class="hero">
+      <div class="hero-copy">
+        <h1>Fifteen seconds per question.</h1>
+        <p>Pick a category, answer before the ring runs out, and watch your name climb the leaderboard.</p>
+        <dl class="rules">
+          <div><dt>Correct answer</dt><dd>100 points</dd></div>
+          <div><dt>Speed bonus</dt><dd>up to 100 points</dd></div>
+          <div><dt>Time runs out</dt><dd>0 points</dd></div>
+        </dl>
+      </div>
+
+      <div class="hero-form">
+        <div id="login-panel">
+          <h2>Log in to play</h2>
+          <form id="login-form">
+            <label>Username
+              <input id="login-username" minlength="3" maxlength="30" required autocomplete="username">
+            </label>
+            <label>Password
+              <input id="login-password" type="password" minlength="8" maxlength="128" required autocomplete="current-password">
+            </label>
+            <button type="submit">Log in</button>
+          </form>
+          <p class="hint">New here? <button id="show-register" type="button" class="link-btn">Create an account</button></p>
         </div>
-        <label>Categorie
-          <select id="category">
-            <option value="" selected>Oricare</option>
-          </select>
-        </label>
-        <button id="start-btn" type="submit">Începe quiz-ul</button>
-      </form>
+
+        <div id="register-panel" hidden>
+          <h2>Create your account</h2>
+          <form id="register-form">
+            <label>Username
+              <input id="register-username" minlength="3" maxlength="30" required autocomplete="username">
+            </label>
+            <label>Password
+              <input id="register-password" type="password" minlength="8" maxlength="128" required autocomplete="new-password">
+            </label>
+            <label>Repeat password
+              <input id="register-password2" type="password" minlength="8" maxlength="128" required autocomplete="new-password">
+            </label>
+            <button type="submit">Create account</button>
+          </form>
+          <p class="hint">Use at least 3 characters for the username and 8 for the password.</p>
+          <p class="hint">Already registered? <button id="show-login" type="button" class="link-btn">Log in</button></p>
+        </div>
+      </div>
     </section>
 
-    <section id="quiz" class="card" hidden>
-      <p id="retake-info" class="retake-info" hidden></p>
-      <p id="progress" class="progress"></p>
-      <div class="timer"><div id="timer-bar" class="timer-bar"></div></div>
-      <p id="timer-text" class="muted"></p>
-      <h2 id="question-text"></h2>
-      <p id="question-category" class="category"></p>
-      <div id="options" class="options"></div>
-      <button id="next-btn" type="button" disabled>Următoarea</button>
-    </section>
+    <div class="layout">
+      <div class="play">
+        <section id="setup" class="panel" hidden>
+          <h2>Start a quiz</h2>
+          <p class="hint lead">You get 15 seconds per question. Fast, correct answers score the most.</p>
+          <form id="setup-form">
+            <div class="row-2">
+              <label>Questions
+                <select id="amount">
+                  <option value="5" selected>5</option>
+                  <option value="10">10</option>
+                  <option value="15">15</option>
+                </select>
+              </label>
+              <label>Difficulty
+                <select id="difficulty">
+                  <option value="" selected>Any</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </label>
+            </div>
+            <label>Category
+              <select id="category">
+                <option value="" selected>Any</option>
+              </select>
+            </label>
+            <button id="start-btn" type="submit">Start quiz</button>
+          </form>
+        </section>
 
-    <section id="result" class="card" hidden>
-      <h2 id="result-title"></h2>
-      <ol id="result-details" class="details"></ol>
-      <button id="again-btn" type="button">Un quiz nou</button>
-    </section>
+        <section id="quiz" class="panel quiz" hidden>
+          <p id="retake-info" class="retake-info" hidden></p>
+          <div id="segments" class="segments" aria-hidden="true"></div>
+          <div class="quiz-top">
+            <div class="quiz-meta">
+              <p id="question-category" class="category"></p>
+              <p id="progress" class="progress"></p>
+              <p id="timer-note" class="timer-note"></p>
+            </div>
+            <div class="ring" role="timer" aria-label="Time left">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+                <circle id="timer-ring" class="ring-progress" cx="60" cy="60" r="52"></circle>
+              </svg>
+              <span id="timer-text" class="ring-text"></span>
+            </div>
+          </div>
+          <h2 id="question-text" class="question"></h2>
+          <div id="options" class="options"></div>
+          <button id="next-btn" type="button" disabled>Next</button>
+        </section>
 
-    <section id="leaderboard" class="card">
-      <h2>Clasament</h2>
-      <p id="empty-scores" class="muted" hidden>Nu există încă niciun scor.</p>
-      <table id="scores-table" hidden>
-        <thead>
-          <tr><th>#</th><th>Jucător</th><th>Scor</th><th>Puncte</th><th>Dificultate</th><th></th></tr>
-        </thead>
-        <tbody id="scores-body"></tbody>
-      </table>
-    </section>
+        <section id="result" class="panel" hidden>
+          <p class="hint tight">Your result</p>
+          <p id="result-score" class="result-score"></p>
+          <p><span id="result-points" class="points-chip"></span></p>
+          <ol id="result-details" class="details"></ol>
+          <button id="again-btn" type="button">New quiz</button>
+        </section>
+      </div>
+
+      <aside id="leaderboard" class="board">
+        <h2>Leaderboard</h2>
+        <p id="empty-scores" class="hint" hidden>No scores yet. Finish a quiz to take the first spot.</p>
+        <ol id="scores-list" class="scores" hidden></ol>
+      </aside>
+    </div>
   </main>
 </body>
 </html>

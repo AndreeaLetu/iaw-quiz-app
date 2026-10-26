@@ -2,11 +2,11 @@ import time
 import uuid
 from typing import Literal, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import database, opentdb
+from app import auth, database, opentdb
 
 app = FastAPI()
 database.init_db()
@@ -20,6 +20,11 @@ MAX_BONUS = 100
 quizzes = {}
 
 
+class Credentials(BaseModel):
+    username: str = Field(min_length=3, max_length=30)
+    password: str = Field(min_length=8, max_length=128)
+
+
 class QuizRequest(BaseModel):
     amount: int = Field(5, ge=1, le=20)
     difficulty: Optional[Literal["easy", "medium", "hard"]] = None
@@ -27,7 +32,6 @@ class QuizRequest(BaseModel):
 
 
 class SubmitRequest(BaseModel):
-    player: str = Field(min_length=1, max_length=30)
     answers: list[int]
     times_ms: list[int]
 
@@ -40,6 +44,22 @@ class RetakeRequest(BaseModel):
 
 def clamp_time(time_ms):
     return min(max(time_ms, MIN_TIME_MS), TIME_LIMIT_MS)
+
+
+def get_owned_quiz(quiz_id, user):
+    quiz = quizzes.get(quiz_id)
+    if quiz is None or quiz["user_id"] != user["id"]:
+        raise HTTPException(status_code=404, detail="Quiz-ul nu există sau a fost deja trimis.")
+    return quiz
+
+
+def get_owned_score(score_id, user):
+    score = database.get_score(score_id)
+    if score is None:
+        raise HTTPException(status_code=404, detail="Scorul nu există.")
+    if score["user_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Nu poți modifica scorul altui jucător.")
+    return score
 
 
 def validate_attempt(quiz, answers, times_ms):
@@ -91,6 +111,45 @@ def hello():
     return {"message": "Salut din serverul quiz!"}
 
 
+@app.post("/api/auth/register", status_code=201)
+def register(body: Credentials):
+    username = body.username.strip()
+    if len(username) < 3:
+        raise HTTPException(
+            status_code=422,
+            detail="Numele de utilizator trebuie să aibă cel puțin 3 caractere.",
+        )
+
+    user_id = database.create_user(username, auth.hash_password(body.password))
+    if user_id is None:
+        raise HTTPException(status_code=409, detail="Numele de utilizator există deja.")
+
+    return {"id": user_id, "username": username}
+
+
+@app.post("/api/auth/login")
+def login(body: Credentials):
+    user = database.get_user_by_username(body.username.strip())
+    if user is None or not auth.verify_password(body.password, user["password_hash"]):
+        raise HTTPException(
+            status_code=401,
+            detail="Nume de utilizator sau parolă incorecte.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return {
+        "access_token": auth.create_token(user["id"], user["username"]),
+        "token_type": "bearer",
+        "user_id": user["id"],
+        "username": user["username"],
+    }
+
+
+@app.get("/api/auth/me")
+def me(user: dict = Depends(auth.get_current_user)):
+    return user
+
+
 @app.get("/api/categories")
 def list_categories():
     try:
@@ -100,7 +159,7 @@ def list_categories():
 
 
 @app.post("/api/quizzes", status_code=201)
-def create_quiz(body: QuizRequest):
+def create_quiz(body: QuizRequest, user: dict = Depends(auth.get_current_user)):
     try:
         questions = opentdb.get_questions(body.amount, body.difficulty, body.category)
     except opentdb.OpenTriviaError as exc:
@@ -111,6 +170,7 @@ def create_quiz(body: QuizRequest):
         "questions": questions,
         "difficulty": body.difficulty,
         "started_at": time.time(),
+        "user_id": user["id"],
     }
 
     return {
@@ -124,20 +184,16 @@ def create_quiz(body: QuizRequest):
 
 
 @app.post("/api/quizzes/{quiz_id}/submit", status_code=201)
-def submit_quiz(quiz_id: str, body: SubmitRequest):
-    quiz = quizzes.get(quiz_id)
-    if quiz is None:
-        raise HTTPException(status_code=404, detail="Quiz-ul nu există sau a fost deja trimis.")
-
-    player = body.player.strip()
-    if not player:
-        raise HTTPException(status_code=422, detail="Numele jucătorului nu poate fi gol.")
+def submit_quiz(quiz_id: str, body: SubmitRequest, user: dict = Depends(auth.get_current_user)):
+    quiz = get_owned_quiz(quiz_id, user)
 
     validate_attempt(quiz, body.answers, body.times_ms)
     score, points, details = grade(quiz["questions"], body.answers, body.times_ms)
 
     total = len(quiz["questions"])
-    score_id = database.add_score(player, score, total, quiz["difficulty"], points)
+    score_id = database.add_score(
+        user["username"], score, total, quiz["difficulty"], points, user_id=user["id"]
+    )
     del quizzes[quiz_id]
 
     return {
@@ -150,10 +206,9 @@ def submit_quiz(quiz_id: str, body: SubmitRequest):
 
 
 @app.put("/api/scores/{score_id}")
-def retake_quiz(score_id: int, body: RetakeRequest):
-    quiz = quizzes.get(body.quiz_id)
-    if quiz is None:
-        raise HTTPException(status_code=404, detail="Quiz-ul nu există sau a fost deja trimis.")
+def retake_quiz(score_id: int, body: RetakeRequest, user: dict = Depends(auth.get_current_user)):
+    get_owned_score(score_id, user)
+    quiz = get_owned_quiz(body.quiz_id, user)
 
     validate_attempt(quiz, body.answers, body.times_ms)
     score, points, details = grade(quiz["questions"], body.answers, body.times_ms)
@@ -179,7 +234,8 @@ def list_scores(limit: int = Query(10, ge=1, le=100)):
 
 
 @app.delete("/api/scores/{score_id}", status_code=204)
-def delete_score(score_id: int):
+def delete_score(score_id: int, user: dict = Depends(auth.get_current_user)):
+    get_owned_score(score_id, user)
     if not database.delete_score(score_id):
         raise HTTPException(status_code=404, detail="Scorul nu există.")
 
