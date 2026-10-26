@@ -58,3 +58,17 @@ def delete_score(score_id):
     with connect() as conn:
         cur = conn.execute("DELETE FROM scores WHERE id = ?", (score_id,))
         return cur.rowcount > 0
+
+
+def update_score(score_id, score, total, difficulty):
+    with connect() as conn:
+        cur = conn.execute(
+            """
+                        UPDATE scores
+                        SET score = ?, total = ?, difficulty = ?, created_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+            (score, total, difficulty, score_id),
+
+        )
+        return cur.rowcount > 0

@@ -24,6 +24,26 @@ class SubmitRequest(BaseModel):
     player: str = Field(min_length=1, max_length=30)
     answers: list[int]
 
+class RetakeRequest(BaseModel):
+    quiz_id: str
+    answers: list[int]
+
+def grade(questions, answers):
+    score = 0
+    details = []
+    for question, answer in zip(questions, answers):
+        options = question["options"]
+        is_correct = answer == question["correct_index"]
+        if is_correct:
+            score += 1
+        details.append({
+            "question": question["question"],
+            # un index în afara intervalului nu dă IndexError, ci "fără răspuns"
+            "your_answer": options[answer] if 0 <= answer < len(options) else None,
+            "correct_answer": options[question["correct_index"]],
+            "is_correct": is_correct,
+        })
+    return score, details
 
 @app.get("/api/hello")
 def hello():
@@ -74,26 +94,12 @@ def submit_quiz(quiz_id: str, body: SubmitRequest):
             detail="Numărul de răspunsuri nu corespunde numărului de întrebări.",
         )
 
-    score = 0
-    details = []
-    for question, answer in zip(questions, body.answers):
-        options = question["options"]
-        is_correct = answer == question["correct_index"]
-        if is_correct:
-            score += 1
-        details.append({
-            "question": question["question"],
-            # un index în afara intervalului nu dă IndexError, ci "fără răspuns"
-            "your_answer": options[answer] if 0 <= answer < len(options) else None,
-            "correct_answer": options[question["correct_index"]],
-            "is_correct": is_correct,
-        })
+    score, details = grade(questions, body.answers)
 
     score_id = database.add_score(player, score, len(questions), quiz["difficulty"])
     del quizzes[quiz_id]
 
     return {"score_id": score_id, "score": score, "total": len(questions), "details": details}
-
 
 @app.get("/api/scores")
 def list_scores(limit: int = Query(10, ge=1, le=100)):
@@ -107,3 +113,29 @@ def delete_score(score_id: int):
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+# PUT OPERATION - REMAKE A QUIZ AND UPDATE THE LEADERBOARD
+#TODO
+
+# PUT OPERATION - REMAKE A QUIZ AND UPDATE THE LEADERBOARD
+@app.put("/api/scores/{score_id}")
+def retake_quiz(score_id: int, body: RetakeRequest):
+    quiz = quizzes.get(body.quiz_id)
+    if quiz is None:
+        raise HTTPException(status_code=404, detail="Quiz-ul nu există sau a fost deja trimis.")
+
+    questions = quiz["questions"]
+    if len(body.answers) != len(questions):
+        raise HTTPException(
+            status_code=422,
+            detail="Numărul de răspunsuri nu corespunde numărului de întrebări.",
+        )
+
+    score, details = grade(questions, body.answers)
+
+    if not database.update_score(score_id, score, len(questions), quiz["difficulty"]):
+        raise HTTPException(status_code=404, detail="Scorul nu există.")
+
+    del quizzes[body.quiz_id]   # șters abia după ce actualizarea a reușit
+
+    return {"score_id": score_id, "score": score, "total": len(questions), "details": details}

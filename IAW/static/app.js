@@ -2,6 +2,7 @@ let quizId = null;
 let questions = [];
 let answers = [];
 let current = 0;
+let retakeScoreId = null;
 
 const DIFFICULTY_LABELS = { easy: "Ușor", medium: "Mediu", hard: "Greu" };
 
@@ -61,6 +62,8 @@ async function loadCategories() {
 async function startQuiz(event) {
   event.preventDefault();
   clearMessage();
+   retakeScoreId = null;
+  $("retake-info").hidden = true;
 
   const body = { amount: Number($("amount").value) };
   if ($("difficulty").value) body.difficulty = $("difficulty").value;
@@ -130,11 +133,23 @@ async function submitQuiz() {
   clearMessage();
   $("next-btn").disabled = true;
   try {
-    const result = await api("/api/quizzes/" + quizId + "/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ player: $("player").value.trim(), answers: answers }),
-    });
+    let result;
+    if (retakeScoreId === null) {
+
+      result = await api("/api/quizzes/" + quizId + "/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ player: $("player").value.trim(), answers: answers }),
+      });
+    } else {
+
+      result = await api("/api/scores/" + retakeScoreId, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quiz_id: quizId, answers: answers }),
+      });
+      retakeScoreId = null;
+    }
     showResult(result);
     loadScores();
   } catch (e) {
@@ -172,6 +187,36 @@ function showResult(result) {
   showSection("result");
 }
 
+async function startRetake(score) {
+  clearMessage();
+
+  const body = { amount: score.total };
+  if (score.difficulty) body.difficulty = score.difficulty;
+
+  try {
+    const data = await api("/api/quizzes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    quizId = data.quiz_id;
+    questions = data.questions;
+    answers = [];
+    current = 0;
+    retakeScoreId = score.id;
+
+    $("retake-info").textContent =
+      "Reiei quiz-ul pentru " + score.player + ". Scorul din clasament va fi înlocuit.";
+    $("retake-info").hidden = false;
+
+    showSection("quiz");
+    showQuestion();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (e) {
+    showMessage(e.message);
+  }
+}
+
 function newQuiz() {
   clearMessage();
   showSection("setup");
@@ -202,11 +247,22 @@ async function loadScores() {
       }
 
       const actionCell = document.createElement("td");
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      const retake = document.createElement("button");
+      retake.type = "button";
+      retake.textContent = "Reia";
+      retake.addEventListener("click", () => startRetake(s));
+      actions.appendChild(retake);
+
       const del = document.createElement("button");
       del.type = "button";
       del.textContent = "Șterge";
       del.addEventListener("click", () => deleteScore(s.id));
-      actionCell.appendChild(del);
+      actions.appendChild(del);
+
+      actionCell.appendChild(actions);
       tr.appendChild(actionCell);
 
       body.appendChild(tr);

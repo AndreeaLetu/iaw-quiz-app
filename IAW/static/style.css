@@ -115,6 +115,16 @@ td button { padding: 4px 10px; font-size: 0.85rem; }
 
 [hidden] { display: none !important; }
 
+.retake-info {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.actions { display: flex; gap: 6px; }
 @media (max-width: 480px) {
   .row { grid-template-columns: 1fr; }
 }
